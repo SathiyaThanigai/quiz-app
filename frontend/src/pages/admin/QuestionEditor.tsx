@@ -13,6 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 interface Question {
   id: string
   question_text: string
+  question_type: 'mcq' | 'text'
   correct_answer: string
   difficulty: string | null
   category: string | null
@@ -32,6 +33,7 @@ export default function QuestionEditor() {
 
   // Form state
   const [formText, setFormText] = useState('')
+  const [formType, setFormType] = useState<'mcq' | 'text'>('mcq')
   const [formCorrect, setFormCorrect] = useState('A')
   const [formTimer, setFormTimer] = useState(20)
   const [formDifficulty, setFormDifficulty] = useState('')
@@ -58,6 +60,7 @@ export default function QuestionEditor() {
 
   const resetForm = () => {
     setFormText('')
+    setFormType('mcq')
     setFormCorrect('A')
     setFormTimer(20)
     setFormDifficulty('')
@@ -71,37 +74,56 @@ export default function QuestionEditor() {
     setEditingId(q.id)
     setShowAdd(false)
     setFormText(q.question_text)
+    setFormType(q.question_type || 'mcq')
     setFormCorrect(q.correct_answer)
     setFormTimer(q.timer_seconds)
     setFormDifficulty(q.difficulty || '')
     setFormCategory(q.category || '')
     setFormExplanation(q.explanation || '')
     setFormImages(q.image_urls || [])
-    setFormOptions(
-      ['A', 'B', 'C', 'D'].map(
-        (label) => q.options.find((o) => o.option_label === label)?.option_text || ''
+    if ((q.question_type || 'mcq') === 'mcq') {
+      setFormOptions(
+        ['A', 'B', 'C', 'D'].map(
+          (label) => q.options.find((o) => o.option_label === label)?.option_text || ''
+        )
       )
-    )
+    } else {
+      setFormOptions(['', '', '', ''])
+    }
   }
 
   const handleSave = async () => {
-    if (!formText || formOptions.some((o) => !o)) {
-      toast.error('Please fill in all fields')
+    if (!formText) {
+      toast.error('Please fill in the question text')
       return
     }
 
-    const data = {
+    if (formType === 'mcq' && formOptions.some((o) => !o)) {
+      toast.error('Please fill in all option fields')
+      return
+    }
+
+    if (formType === 'text' && !formCorrect.trim()) {
+      toast.error('Please fill in the correct answer')
+      return
+    }
+
+    const data: any = {
       question_text: formText,
+      question_type: formType,
       correct_answer: formCorrect,
       timer_seconds: formTimer,
       difficulty: formDifficulty || null,
       category: formCategory || null,
       explanation: formExplanation || null,
       image_urls: formImages.length > 0 ? formImages : null,
-      options: ['A', 'B', 'C', 'D'].map((label, i) => ({
+    }
+
+    if (formType === 'mcq') {
+      data.options = ['A', 'B', 'C', 'D'].map((label, i) => ({
         option_label: label,
         option_text: formOptions[i],
-      })),
+      }))
     }
 
     try {
@@ -256,6 +278,27 @@ export default function QuestionEditor() {
                 />
               </div>
 
+              {/* Question Type */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Question Type</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setFormType('mcq'); setFormCorrect('A') }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${formType === 'mcq' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    Multiple Choice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setFormType('text'); setFormCorrect('') }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${formType === 'text' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    Type the Answer
+                  </button>
+                </div>
+              </div>
+
               {/* Image upload */}
               <div>
                 <label className="block text-sm font-medium mb-1">Images (optional)</label>
@@ -297,39 +340,59 @@ export default function QuestionEditor() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {['A', 'B', 'C', 'D'].map((label, i) => (
-                  <div key={label}>
-                    <label className="block text-sm font-medium mb-1">
-                      Option {label} *
-                      {formCorrect === label && (
-                        <span className="ml-2 text-green-600 text-xs">(Correct)</span>
-                      )}
-                    </label>
-                    <input
-                      type="text"
-                      className={`input-field ${formCorrect === label ? 'border-green-500 ring-1 ring-green-500' : ''}`}
-                      value={formOptions[i]}
-                      onChange={(e) => updateOption(i, e.target.value)}
-                      placeholder={`Option ${label}`}
-                    />
-                  </div>
-                ))}
-              </div>
+              {/* MCQ Options */}
+              {formType === 'mcq' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {['A', 'B', 'C', 'D'].map((label, i) => (
+                    <div key={label}>
+                      <label className="block text-sm font-medium mb-1">
+                        Option {label} *
+                        {formCorrect === label && (
+                          <span className="ml-2 text-green-600 text-xs">(Correct)</span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        className={`input-field ${formCorrect === label ? 'border-green-500 ring-1 ring-green-500' : ''}`}
+                        value={formOptions[i]}
+                        onChange={(e) => updateOption(i, e.target.value)}
+                        placeholder={`Option ${label}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Text Answer Input */}
+              {formType === 'text' && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Correct Answer</label>
-                  <select
+                  <label className="block text-sm font-medium mb-1">Correct Answer *</label>
+                  <input
+                    type="text"
                     className="input-field"
                     value={formCorrect}
                     onChange={(e) => setFormCorrect(e.target.value)}
-                  >
-                    {['A', 'B', 'C', 'D'].map((l) => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
+                    placeholder="Type the correct answer (case-insensitive matching)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Participants must type this answer exactly (case-insensitive).</p>
                 </div>
+              )}
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {formType === 'mcq' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Correct Answer</label>
+                    <select
+                      className="input-field"
+                      value={formCorrect}
+                      onChange={(e) => setFormCorrect(e.target.value)}
+                    >
+                      {['A', 'B', 'C', 'D'].map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium mb-1">Timer (sec)</label>
                   <input
@@ -429,21 +492,30 @@ export default function QuestionEditor() {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-2 gap-2 mt-3">
-                        {q.options.map((opt) => (
-                          <div
-                            key={opt.id}
-                            className={`px-3 py-2 rounded-lg text-sm ${
-                              opt.option_label === q.correct_answer
-                                ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700'
-                                : 'bg-gray-50 dark:bg-gray-700'
-                            }`}
-                          >
-                            <span className="font-semibold">{opt.option_label}.</span> {opt.option_text}
-                          </div>
-                        ))}
-                      </div>
+                      {(q.question_type || 'mcq') === 'mcq' ? (
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          {q.options.map((opt) => (
+                            <div
+                              key={opt.id}
+                              className={`px-3 py-2 rounded-lg text-sm ${
+                                opt.option_label === q.correct_answer
+                                  ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700'
+                                  : 'bg-gray-50 dark:bg-gray-700'
+                              }`}
+                            >
+                              <span className="font-semibold">{opt.option_label}.</span> {opt.option_text}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 px-3 py-2 rounded-lg text-sm bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700 inline-block">
+                          <span className="font-semibold">Answer:</span> {q.correct_answer}
+                        </div>
+                      )}
                       <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${(q.question_type || 'mcq') === 'mcq' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'}`}>
+                          {(q.question_type || 'mcq') === 'mcq' ? 'MCQ' : 'Text'}
+                        </span>
                         <span className="flex items-center gap-1"><Clock size={12} /> {q.timer_seconds}s</span>
                         {q.difficulty && <span className="flex items-center gap-1"><Tag size={12} /> {q.difficulty}</span>}
                         {q.category && <span>{q.category}</span>}

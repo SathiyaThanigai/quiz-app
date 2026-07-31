@@ -11,12 +11,16 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 interface Question {
   id: string
   question_text: string
+  question_type: 'mcq' | 'text'
   correct_answer: string
   explanation: string | null
   timer_seconds: number
+  image_urls: string[]
   options: { option_label: string; option_text: string }[]
 }
 
@@ -126,6 +130,29 @@ export default function LiveControl() {
         setSubmissions(message.data?.submissions || 0)
         setTotalParticipants(message.data?.total_participants || 0)
         break
+      case 'question_started': {
+        // Timer sync: start timer from server echo so all screens are in sync
+        const timerSec = message.data?.timer_seconds || 0
+        let adjusted = timerSec
+        if (message.data?.server_time) {
+          const serverMs = new Date(message.data.server_time + 'Z').getTime()
+          const elapsedSec = (Date.now() - serverMs) / 1000
+          adjusted = Math.max(0, Math.round(timerSec - elapsedSec))
+        }
+        setTimer(adjusted)
+        if (timerRef.current) clearInterval(timerRef.current)
+        timerRef.current = setInterval(() => {
+          setTimer((prev) => {
+            if (prev <= 1) {
+              if (timerRef.current) clearInterval(timerRef.current)
+              wsRef.current?.send({ type: 'end_question' })
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+        break
+      }
       case 'question_ended':
         break
       case 'answer_revealed':
@@ -149,23 +176,9 @@ export default function LiveControl() {
     setSubmissions(0)
     setCorrectCount(0)
 
-    const q = questions[currentIndex]
-    if (q) {
-      setTimer(q.timer_seconds)
-      if (timerRef.current) clearInterval(timerRef.current)
-      timerRef.current = setInterval(() => {
-        setTimer((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current)
-            wsRef.current?.send({ type: 'end_question' })
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-
     wsRef.current.send({ type: 'start_question', data: { index: currentIndex } })
+    // Timer will be started when we receive the question_started echo from the server
+    // This ensures admin timer is in sync with display/participant timers
   }
 
   const endQuestion = () => {
@@ -282,23 +295,52 @@ export default function LiveControl() {
                   </span>
                 </div>
                 <h2 className="text-lg sm:text-xl font-semibold mb-4">{currentQuestion.question_text}</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                  {currentQuestion.options.map((opt) => (
-                    <div
-                      key={opt.option_label}
-                      className={`p-3 rounded-lg text-sm font-medium ${
-                        phase === 'revealed' && opt.option_label === currentQuestion.correct_answer
-                          ? 'bg-green-100 dark:bg-green-900/40 border-2 border-green-500 text-green-800 dark:text-green-200'
-                          : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600'
-                      }`}
-                    >
-                      <span className="font-bold">{opt.option_label}.</span> {opt.option_text}
-                      {phase === 'revealed' && opt.option_label === currentQuestion.correct_answer && (
+                {currentQuestion.image_urls && currentQuestion.image_urls.length > 0 && (
+                  <div className="flex gap-2 mb-4 flex-wrap">
+                    {currentQuestion.image_urls.map((url, i) => (
+                      <img
+                        key={i}
+                        src={`${API_URL}${url}`}
+                        alt={`Question image ${i + 1}`}
+                        className="max-h-40 rounded-lg object-contain border border-gray-200 dark:border-gray-600"
+                      />
+                    ))}
+                  </div>
+                )}
+                {(currentQuestion.question_type || 'mcq') === 'mcq' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    {currentQuestion.options.map((opt) => (
+                      <div
+                        key={opt.option_label}
+                        className={`p-3 rounded-lg text-sm font-medium ${
+                          phase === 'revealed' && opt.option_label === currentQuestion.correct_answer
+                            ? 'bg-green-100 dark:bg-green-900/40 border-2 border-green-500 text-green-800 dark:text-green-200'
+                            : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600'
+                        }`}
+                      >
+                        <span className="font-bold">{opt.option_label}.</span> {opt.option_text}
+                        {phase === 'revealed' && opt.option_label === currentQuestion.correct_answer && (
+                          <CheckCircle size={14} className="inline ml-2 text-green-500" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`p-3 rounded-lg text-sm font-medium ${
+                    phase === 'revealed'
+                      ? 'bg-green-100 dark:bg-green-900/40 border-2 border-green-500 text-green-800 dark:text-green-200'
+                      : 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-purple-800 dark:text-purple-200'
+                  }`}>
+                    {phase === 'revealed' ? (
+                      <>
+                        <span className="font-bold">Correct Answer:</span> {currentQuestion.correct_answer}
                         <CheckCircle size={14} className="inline ml-2 text-green-500" />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      </>
+                    ) : (
+                      <span className="italic">Type the answer question — participants will type their response</span>
+                    )}
+                  </div>
+                )}
                 {phase === 'revealed' && currentQuestion.explanation && (
                   <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                     <p className="text-sm text-blue-800 dark:text-blue-200">

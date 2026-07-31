@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class AnswerSubmit(BaseModel):
     question_id: str
-    selected_answer: str = Field(..., min_length=1, max_length=1)
+    selected_answer: str = Field(..., min_length=1, max_length=500)
     response_time: float = Field(..., ge=0)
 
 

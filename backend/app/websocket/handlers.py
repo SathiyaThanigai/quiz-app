@@ -164,12 +164,14 @@ async def participant_websocket(
                             "question_id": question.id,
                             "question_index": session.current_question_index,
                             "question_text": question.question_text,
+                            "question_type": question.question_type or "mcq",
                             "image_urls": _img_urls,
                             "options": [
                                 {"label": opt.option_label, "text": opt.option_text}
                                 for opt in question.options
                             ],
                             "timer_seconds": question.timer_seconds,
+                            "server_time": datetime.utcnow().isoformat(),
                             "total_questions": len(session.questions),
                         }
                     })
@@ -326,12 +328,14 @@ async def start_question(session_id: str, db: Session, index=None):
             "question_id": question.id,
             "question_index": session.current_question_index,
             "question_text": question.question_text,
+            "question_type": question.question_type or "mcq",
             "image_urls": image_urls,
             "options": [
                 {"label": opt.option_label, "text": opt.option_text}
                 for opt in question.options
             ],
             "timer_seconds": question.timer_seconds,
+            "server_time": datetime.utcnow().isoformat(),
             "total_questions": len(session.questions),
         }
     }
@@ -559,7 +563,7 @@ async def handle_answer_submission(
     """Process a participant's answer submission."""
     answer_data = data.get("data", {})
     question_id = answer_data.get("question_id")
-    selected_answer = answer_data.get("selected_answer", "").upper()
+    selected_answer = answer_data.get("selected_answer", "")
     response_time = answer_data.get("response_time", 0)
 
     if not question_id or not selected_answer:
@@ -600,7 +604,14 @@ async def handle_answer_submission(
         })
         return
 
-    is_correct = selected_answer == question.correct_answer
+    # Determine correctness based on question type
+    question_type = question.question_type or "mcq"
+    if question_type == "mcq":
+        selected_answer = selected_answer.upper()
+        is_correct = selected_answer == question.correct_answer
+    else:
+        # Text type: case-insensitive, trimmed comparison
+        is_correct = selected_answer.strip().lower() == question.correct_answer.strip().lower()
 
     # Create response
     response = Response(

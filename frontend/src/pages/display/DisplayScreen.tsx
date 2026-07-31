@@ -11,6 +11,7 @@ interface QuestionData {
   question_id: string
   question_index: number
   question_text: string
+  question_type: 'mcq' | 'text'
   image_urls: string[]
   options: { label: string; text: string }[]
   timer_seconds: number
@@ -52,8 +53,14 @@ export default function DisplayScreen() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const startTimer = useCallback((seconds: number) => {
-    setTimer(seconds)
+  const startTimer = useCallback((seconds: number, serverTime?: string) => {
+    let adjustedSeconds = seconds
+    if (serverTime) {
+      const serverMs = new Date(serverTime + 'Z').getTime()
+      const elapsedSec = (Date.now() - serverMs) / 1000
+      adjustedSeconds = Math.max(0, Math.round(seconds - elapsedSec))
+    }
+    setTimer(adjustedSeconds)
     if (timerRef.current) clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
@@ -91,7 +98,7 @@ export default function DisplayScreen() {
         setExplanation(null)
         setPerQuestionLeaderboard([])
         setSubmissions(0)
-        startTimer(msg.data.timer_seconds)
+        startTimer(msg.data.timer_seconds, msg.data.server_time)
         break
       case 'submission_update':
         setSubmissions(msg.data?.submissions || 0)
@@ -205,16 +212,24 @@ export default function DisplayScreen() {
                 )}
               </div>
 
-              {/* Options */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {question.options.map((opt, i) => (
-                  <motion.div key={opt.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
-                    className={`${optionBgColors[i]} rounded-lg sm:rounded-xl p-3 sm:p-5 flex items-center gap-3`}>
-                    <span className="text-xl sm:text-3xl font-bold opacity-80">{opt.label}</span>
-                    <span className="text-base sm:text-xl font-medium">{opt.text}</span>
-                  </motion.div>
-                ))}
-              </div>
+              {/* Options or Text Indicator */}
+              {(question.question_type || 'mcq') === 'mcq' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {question.options.map((opt, i) => (
+                    <motion.div key={opt.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
+                      className={`${optionBgColors[i]} rounded-lg sm:rounded-xl p-3 sm:p-5 flex items-center gap-3`}>
+                      <span className="text-xl sm:text-3xl font-bold opacity-80">{opt.label}</span>
+                      <span className="text-base sm:text-xl font-medium">{opt.text}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                  className="bg-gray-800 rounded-xl p-6 sm:p-8 text-center border-2 border-dashed border-gray-600">
+                  <p className="text-xl sm:text-2xl text-gray-300 font-medium">Type your answer on your device</p>
+                  <p className="text-sm sm:text-base text-gray-500 mt-2">Participants are typing their answers...</p>
+                </motion.div>
+              )}
             </motion.div>
           )}
 
@@ -227,7 +242,11 @@ export default function DisplayScreen() {
                 <div className="flex items-center justify-center gap-3 mb-2">
                   <span className="text-base sm:text-xl text-gray-300">Answer:</span>
                   <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}
-                    className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-green-500 text-2xl sm:text-3xl font-bold">
+                    className={`inline-flex items-center justify-center rounded-full bg-green-500 font-bold ${
+                      correctAnswer && correctAnswer.length > 1
+                        ? 'px-5 py-2 sm:px-8 sm:py-3 text-lg sm:text-2xl'
+                        : 'w-12 h-12 sm:w-16 sm:h-16 text-2xl sm:text-3xl'
+                    }`}>
                     {correctAnswer}
                   </motion.span>
                 </div>

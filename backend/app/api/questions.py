@@ -43,6 +43,7 @@ def question_to_response(question: Question) -> dict:
         "id": question.id,
         "session_id": question.session_id,
         "question_text": question.question_text,
+        "question_type": question.question_type or "mcq",
         "image_urls": image_urls,
         "correct_answer": question.correct_answer,
         "difficulty": question.difficulty,
@@ -107,21 +108,22 @@ async def create_question(
         ).count()
         order_index = max_order
 
-    # Validate correct answer is A, B, C, or D
-    if question_data.correct_answer.upper() not in ["A", "B", "C", "D"]:
-        raise HTTPException(
-            status_code=400, detail="Correct answer must be A, B, C, or D"
-        )
-
     # Serialize image_urls to JSON
     image_urls_json = json.dumps(question_data.image_urls) if question_data.image_urls else None
+
+    # Determine correct_answer based on type
+    if question_data.question_type == "mcq":
+        correct_answer = question_data.correct_answer.upper()
+    else:
+        correct_answer = question_data.correct_answer.strip()
 
     # Create question
     question = Question(
         session_id=session_id,
         question_text=question_data.question_text,
+        question_type=question_data.question_type,
         image_urls=image_urls_json,
-        correct_answer=question_data.correct_answer.upper(),
+        correct_answer=correct_answer,
         difficulty=question_data.difficulty,
         category=question_data.category,
         explanation=question_data.explanation,
@@ -131,15 +133,16 @@ async def create_question(
     db.add(question)
     db.flush()
 
-    # Create options
-    for opt in question_data.options:
-        option = QuestionOption(
-            question_id=question.id,
-            option_label=opt.option_label.upper(),
-            option_text=opt.option_text,
-            is_correct=(opt.option_label.upper() == question_data.correct_answer.upper()),
-        )
-        db.add(option)
+    # Create options only for MCQ
+    if question_data.question_type == "mcq" and question_data.options:
+        for opt in question_data.options:
+            option = QuestionOption(
+                question_id=question.id,
+                option_label=opt.option_label.upper(),
+                option_text=opt.option_text,
+                is_correct=(opt.option_label.upper() == correct_answer),
+            )
+            db.add(option)
 
     db.commit()
     db.refresh(question)
@@ -189,7 +192,12 @@ async def update_question(
     update_data = question_data.model_dump(exclude_unset=True, exclude={"options"})
 
     if "correct_answer" in update_data and update_data["correct_answer"]:
-        update_data["correct_answer"] = update_data["correct_answer"].upper()
+        # For MCQ, uppercase; for text, strip whitespace
+        question_type = update_data.get("question_type", question.question_type or "mcq")
+        if question_type == "mcq":
+            update_data["correct_answer"] = update_data["correct_answer"].upper()
+        else:
+            update_data["correct_answer"] = update_data["correct_answer"].strip()
 
     # Handle image_urls serialization
     if "image_urls" in update_data:
@@ -199,7 +207,7 @@ async def update_question(
     for key, value in update_data.items():
         setattr(question, key, value)
 
-    # Update options if provided
+    # Update options if provided (only relevant for MCQ)
     if question_data.options is not None:
         # Remove existing options
         db.query(QuestionOption).filter(
@@ -216,6 +224,11 @@ async def update_question(
                 is_correct=(opt.option_label.upper() == correct),
             )
             db.add(option)
+    elif (question.question_type or "mcq") == "text":
+        # If switching to text type, remove existing options
+        db.query(QuestionOption).filter(
+            QuestionOption.question_id == question_id
+        ).delete()
 
     db.commit()
     db.refresh(question)
@@ -285,6 +298,7 @@ async def duplicate_question(
     new_question = Question(
         session_id=session_id,
         question_text=question.question_text,
+        question_type=question.question_type or "mcq",
         image_urls=question.image_urls,
         correct_answer=question.correct_answer,
         difficulty=question.difficulty,
@@ -338,8 +352,8 @@ async def import_questions(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
 
-    # Required columns
-    required_cols = ["question_text", "option_a", "option_b", "option_c", "option_d", "correct_answer"]
+    # Required columns (option columns only required for MCQ)
+    required_cols = ["question_text", "correct_answer"]
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         raise HTTPException(
@@ -354,13 +368,24 @@ async def import_questions(
 
     created_questions = []
     for idx, row in df.iterrows():
-        correct = str(row["correct_answer"]).upper().strip()
-        if correct not in ["A", "B", "C", "D"]:
-            continue
+        question_type = str(row.get("question_type", "mcq")).strip().lower()
+        if question_type not in ("mcq", "text"):
+            question_type = "mcq"
+
+        correct = str(row["correct_answer"]).strip()
+
+        if question_type == "mcq":
+            correct = correct.upper()
+            if correct not in ["A", "B", "C", "D"]:
+                continue
+            # Check option columns exist for MCQ
+            if not all(col in df.columns for col in ["option_a", "option_b", "option_c", "option_d"]):
+                continue
 
         question = Question(
             session_id=session_id,
             question_text=str(row["question_text"]),
+            question_type=question_type,
             correct_answer=correct,
             difficulty=str(row.get("difficulty", "")) or None,
             category=str(row.get("category", "")) or None,
@@ -371,21 +396,23 @@ async def import_questions(
         db.add(question)
         db.flush()
 
-        options_data = [
-            ("A", str(row["option_a"])),
-            ("B", str(row["option_b"])),
-            ("C", str(row["option_c"])),
-            ("D", str(row["option_d"])),
-        ]
+        # Create options only for MCQ
+        if question_type == "mcq":
+            options_data = [
+                ("A", str(row["option_a"])),
+                ("B", str(row["option_b"])),
+                ("C", str(row["option_c"])),
+                ("D", str(row["option_d"])),
+            ]
 
-        for label, text in options_data:
-            option = QuestionOption(
-                question_id=question.id,
-                option_label=label,
-                option_text=text,
-                is_correct=(label == correct),
-            )
-            db.add(option)
+            for label, text in options_data:
+                option = QuestionOption(
+                    question_id=question.id,
+                    option_label=label,
+                    option_text=text,
+                    is_correct=(label == correct),
+                )
+                db.add(option)
 
         created_questions.append(question)
 

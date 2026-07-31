@@ -16,7 +16,8 @@ class Question(Base):
     session_id = Column(String, ForeignKey("quiz_sessions.id"), nullable=False)
     question_text = Column(Text, nullable=False)
     image_urls = Column(Text, nullable=True)  # JSON array of image URLs/paths
-    correct_answer = Column(String(1), nullable=False)  # A, B, C, or D
+    question_type = Column(String(20), nullable=False, default="mcq")  # mcq or text
+    correct_answer = Column(String(500), nullable=False)  # A, B, C, D for MCQ; free text for text type
     difficulty = Column(String(20), nullable=True)  # easy, medium, hard
     category = Column(String(100), nullable=True)
     explanation = Column(Text, nullable=True)

@@ -16,7 +16,7 @@ class Response(Base):
     participant_id = Column(String, ForeignKey("participants.id"), nullable=False)
     question_id = Column(String, ForeignKey("questions.id"), nullable=False)
     session_id = Column(String, ForeignKey("quiz_sessions.id"), nullable=False)
-    selected_answer = Column(String(1), nullable=False)  # A, B, C, D
+    selected_answer = Column(String(500), nullable=False)  # A, B, C, D for MCQ; typed text for text type
     is_correct = Column(Boolean, default=False)
     response_time = Column(Float, nullable=False)  # Time in seconds from question start
     submitted_at = Column(DateTime, default=datetime.utcnow)
