@@ -52,4 +52,11 @@ async def get_image(filename: str):
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(filepath)
+
+    # Determine media type from extension
+    import mimetypes
+    media_type, _ = mimetypes.guess_type(filepath)
+    if not media_type:
+        media_type = "application/octet-stream"
+
+    return FileResponse(filepath, media_type=media_type)

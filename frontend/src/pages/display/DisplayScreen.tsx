@@ -5,7 +5,7 @@ import { QuizWebSocket, WebSocketMessage } from '../../services/websocket'
 import { Clock, Users, Trophy, Maximize, Wifi, WifiOff, CheckCircle, Award } from 'lucide-react'
 import ImageZoom from '../../components/ImageZoom'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 interface QuestionData {
   question_id: string
@@ -51,27 +51,6 @@ export default function DisplayScreen() {
   const [perQuestionLeaderboard, setPerQuestionLeaderboard] = useState<PerQuestionEntry[]>([])
   const [finalLeaderboard, setFinalLeaderboard] = useState<FinalLeaderboardEntry[]>([])
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const startTimer = useCallback((seconds: number, serverTime?: string) => {
-    let adjustedSeconds = seconds
-    if (serverTime) {
-      const serverMs = new Date(serverTime + 'Z').getTime()
-      const elapsedSec = (Date.now() - serverMs) / 1000
-      adjustedSeconds = Math.max(0, Math.round(seconds - elapsedSec))
-    }
-    setTimer(adjustedSeconds)
-    if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
-      setTimer((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }, [])
 
   const handleMessage = useCallback((msg: WebSocketMessage) => {
     switch (msg.type) {
@@ -98,14 +77,19 @@ export default function DisplayScreen() {
         setExplanation(null)
         setPerQuestionLeaderboard([])
         setSubmissions(0)
-        startTimer(msg.data.timer_seconds, msg.data.server_time)
+        setTimer(msg.data.timer_seconds)
+        break
+      case 'timer_tick':
+        setTimer(msg.data.remaining)
+        break
+      case 'timer_expired':
+        setTimer(0)
         break
       case 'submission_update':
         setSubmissions(msg.data?.submissions || 0)
         if (msg.data?.total_participants) setTotalParticipants(msg.data.total_participants)
         break
       case 'question_ended':
-        if (timerRef.current) clearInterval(timerRef.current)
         setTimer(0)
         break
       case 'answer_revealed':
@@ -126,7 +110,7 @@ export default function DisplayScreen() {
         setPhase('completed')
         break
     }
-  }, [startTimer])
+  }, [])
 
   useEffect(() => {
     if (!sessionId) return
@@ -136,7 +120,6 @@ export default function DisplayScreen() {
     ws.connect(`/ws/display/${sessionId}`)
     return () => {
       ws.disconnect()
-      if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [sessionId, handleMessage])
 
@@ -153,7 +136,7 @@ export default function DisplayScreen() {
   const optionBgColors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500']
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
+    <div className="mobile-full-height bg-gray-900 text-white flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-4 sm:px-6 py-2 flex items-center justify-between border-b border-gray-700 shrink-0">
         <div className="flex items-center gap-3">

@@ -34,10 +34,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-primary-50 to-accent-50 dark:from-gray-900 dark:to-gray-800">
+    <div className="mobile-full-height flex items-center justify-center px-4 bg-gradient-to-br from-primary-50 to-accent-50 dark:from-gray-900 dark:to-gray-800">
       <button
         onClick={toggleTheme}
-        className="absolute top-4 right-4 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm"
+        className="absolute top-4 right-4 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
         aria-label="Toggle theme"
       >
         {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}

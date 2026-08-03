@@ -1,78 +1,156 @@
-# QuizMaster - Real-Time Quiz & Speed-Based Leaderboard
+# Pulse - Real-Time Quiz Application
 
-A production-ready real-time quiz web application where an administrator hosts live multiple-choice quizzes while multiple teams participate simultaneously. The app prioritizes speed and accuracy, automatically ranking participants based on how quickly they submit correct answers.
+A real-time quiz web application where an admin hosts live quizzes (multiple choice and type-the-answer) while multiple teams participate simultaneously. The app uses speed-based scoring — faster correct answers earn more points. It features three synchronized screens: Admin Control, Participant View, and a Display/Projector Screen, all connected via WebSockets.
+
+---
+
+## What This App Does
+
+- Admin creates quiz sessions with questions (MCQ or text-input type)
+- Participants join via a 6-character session code on their phones/laptops
+- Admin controls the quiz live — starting questions, managing timers, revealing answers
+- A Display Screen (meant for a projector) shows questions, countdowns, and leaderboards to the audience
+- Scoring is automatic and speed-based: first correct answer gets 10 pts, second gets 9, etc.
+- Results can be exported as CSV or Excel
+
+---
+
+## Tech Stack & Why Each Was Chosen
+
+### Backend
+
+| Framework / Library | Version | Why |
+|---|---|---|
+| **FastAPI** | 0.104+ | High-performance async Python web framework with built-in WebSocket support, auto-generated API docs (Swagger/ReDoc), and Pydantic validation |
+| **Uvicorn** | 0.24+ | ASGI server that runs FastAPI; supports async I/O needed for WebSocket connections |
+| **SQLAlchemy** | 2.0+ | ORM for database models; works with both SQLite (dev) and PostgreSQL (prod) |
+| **Pydantic / Pydantic-Settings** | 2.5+ | Request/response validation and environment variable management |
+| **python-jose** | 3.3+ | JWT token creation and verification for authentication |
+| **passlib[bcrypt]** | 1.7+ | Secure password hashing |
+| **pandas + openpyxl** | 2.1+ / 3.1+ | CSV and Excel import/export for questions and results |
+| **websockets** | 12.0+ | WebSocket protocol support for real-time communication |
+| **SQLite** (dev) / **PostgreSQL** (prod) | — | SQLite for zero-config local development; PostgreSQL for production scalability |
+
+### Frontend
+
+| Framework / Library | Version | Why |
+|---|---|---|
+| **React** | 18.2 | Component-based UI library for building the three interactive screens |
+| **TypeScript** | 5.3 | Type safety across the entire frontend codebase |
+| **Vite** | 5.0 | Fast dev server with hot module replacement; instant builds |
+| **Tailwind CSS** | 3.4 | Utility-first CSS for rapid UI development without writing custom stylesheets |
+| **React Router** | 6.21 | Client-side routing between admin, participant, and display pages |
+| **Framer Motion** | 10.18 | Smooth animations for question transitions, timers, and leaderboard reveals |
+| **Lucide React** | 0.303 | Consistent icon set used across all interfaces |
+| **react-hot-toast** | 2.4 | Lightweight toast notifications for user feedback |
+| **clsx** | 2.1 | Conditional className utility |
+
+### Infrastructure
+
+| Tool | Why |
+|---|---|
+| **Docker & Docker Compose** | Containerized deployment with PostgreSQL, backend, and frontend in one command |
+| **PostCSS + Autoprefixer** | CSS processing pipeline required by Tailwind |
+
+---
 
 ## Features
 
-- **Real-Time Synchronization** - WebSocket-powered instant updates across all connected devices
-- **Speed-Based Scoring** - Faster correct answers earn more points (10, 9, 8, 7, 6, 5 for subsequent ranks)
-- **Three Interfaces** - Admin Dashboard, Participant View, and Public Display/Projector Screen
-- **Individual Timers** - Each question has its own configurable countdown timer
-- **Live Leaderboard** - Auto-updating rankings based on score, correct answers, and speed
-- **Dark/Light Mode** - Full theme support across all interfaces
-- **Mobile-First** - Responsive design works on all devices
-- **Import/Export** - CSV and Excel support for questions and results
-- **Session Management** - Create, save, duplicate, archive, and reuse quiz sessions
+- Real-time sync across all devices via WebSockets
+- Two question types: Multiple Choice (A/B/C/D) and Type-the-Answer (case-insensitive text matching)
+- Speed-based scoring (10, 9, 8, 7, 6, 5 points for ranks 1-6+)
+- Per-question leaderboard and final standings with podium animation
+- Configurable timer per question (5–300 seconds)
+- Image support on questions (upload and display)
+- Import questions from CSV/Excel
+- Export results as CSV/Excel
+- Dark/Light mode
+- Mobile-first responsive design
+- Session management (create, duplicate, archive, reuse)
+- Keyboard shortcuts on admin live control (arrows to navigate, space/enter to start)
 
-## Tech Stack
+---
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, TypeScript, Tailwind CSS, Framer Motion |
-| Backend | FastAPI (Python), SQLAlchemy |
-| Database | PostgreSQL (production) / SQLite (development) |
-| Real-Time | WebSockets |
-| Auth | JWT (JSON Web Tokens) |
-| Deployment | Docker & Docker Compose |
+## Project Structure
 
-## Quick Start
+```
+quiz-app/
+├── backend/
+│   ├── app/
+│   │   ├── api/              # REST endpoints (auth, sessions, questions, export, uploads)
+│   │   ├── core/             # Config, database connection, JWT security
+│   │   ├── models/           # SQLAlchemy ORM models (User, QuizSession, Question, Response, Participant)
+│   │   ├── schemas/          # Pydantic request/response schemas
+│   │   ├── services/         # Scoring engine, export logic
+│   │   ├── websocket/        # WebSocket connection manager + event handlers
+│   │   └── main.py           # FastAPI app entry point
+│   ├── uploads/              # Uploaded question images
+│   ├── quiz.db               # SQLite database (auto-created)
+│   ├── seed_data.py          # Database initializer
+│   ├── migrate_add_question_type.py  # Migration for text question type
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── admin/        # AdminDashboard, SessionManager, QuestionEditor, LiveControl
+│   │   │   ├── participant/  # ParticipantLobby, ParticipantQuiz
+│   │   │   └── display/      # DisplayEntry, DisplayScreen
+│   │   ├── components/       # Shared components (ImageZoom)
+│   │   ├── contexts/         # AuthContext, ThemeContext
+│   │   ├── services/         # API client, WebSocket service
+│   │   └── App.tsx           # Router
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
+
+---
+
+## How to Run
 
 ### Prerequisites
 
-- Python 3.10+ (backend)
-- Node.js 18+ (frontend)
-- Docker & Docker Compose (optional, for containerized setup)
+- **Python 3.10+** (backend)
+- **Node.js 18+** (frontend)
+- **Docker** (optional, for containerized setup)
 
-### Option 1: Docker (Recommended)
+---
 
-```bash
-cd quiz-app
+### Option 1: Local Development (Recommended for dev)
 
-# Start all services
-docker-compose up --build
-
-# The app will be available at:
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
-```
-
-### Option 2: Local Development
-
-#### Backend Setup
+#### 1. Backend
 
 ```bash
-cd quiz-app/backend
+cd backend
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or: venv\Scripts\activate  # Windows
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Mac/Linux
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Seed database with sample data
+# Initialize database (creates quiz.db with tables)
 python seed_data.py
 
-# Start the server
+# Run migration for text question type (if upgrading existing DB)
+python migrate_add_question_type.py
+
+# Start the backend server
 uvicorn app.main:app --reload --port 8000
 ```
 
-#### Frontend Setup
+Backend runs at: **http://localhost:8000**
+API docs at: **http://localhost:8000/docs**
+
+#### 2. Frontend
 
 ```bash
-cd quiz-app/frontend
+cd frontend
 
 # Install dependencies
 npm install
@@ -81,217 +159,159 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:3000` and the backend at `http://localhost:8000`.
+Frontend runs at: **http://localhost:5173**
 
-## Default Credentials
+---
 
-After running the seed script:
+### Option 2: Docker Compose (Production-like)
 
-- **Admin Login**: `admin` / `admin123`
-- **API Documentation**: http://localhost:8000/docs
+```bash
+cd quiz-app
 
-## How It Works
+# Start everything (PostgreSQL + Backend + Frontend)
+docker-compose up --build
 
-### 1. Admin Creates a Quiz
-
-1. Log in at `/login`
-2. Create a new session from the dashboard
-3. Add questions (manually or import from CSV/Excel)
-4. Configure individual timers per question
-
-### 2. Open the Lobby
-
-1. Click "Open Lobby" to allow participants to join
-2. Share the 6-character session code with participants
-3. Optionally open the Display Screen (`/display/{sessionId}`) on a projector
-
-### 3. Participants Join
-
-1. Navigate to `/join` (or the root URL)
-2. Enter the session code and team name
-3. Wait in the lobby until the admin starts
-
-### 4. Run the Quiz
-
-1. Admin clicks "Start Quiz" to begin
-2. For each question:
-   - Admin clicks "Start Question" to show it to everyone
-   - Timer counts down, participants submit answers
-   - Admin can end the timer early or wait for it to expire
-   - Admin reveals the correct answer
-   - Admin shows the leaderboard
-   - Admin moves to the next question
-
-### 5. View Results
-
-- Real-time leaderboard updates after each question
-- Export results as CSV or Excel when the quiz ends
-- Archive completed sessions for later reference
-
-## Scoring System
-
-| Submission Rank | Points Awarded |
-|----------------|---------------|
-| 1st correct | 10 points |
-| 2nd correct | 9 points |
-| 3rd correct | 8 points |
-| 4th correct | 7 points |
-| 5th correct | 6 points |
-| 6th+ correct | 5 points |
-| Wrong/No answer | 0 points |
-
-Ties (identical response times) receive the same score.
-
-### Leaderboard Ranking Priority
-
-1. Total Score (highest first)
-2. Correct Answers (most first)
-3. Average Response Time (fastest first)
-
-## Project Structure
-
-```
-quiz-app/
-├── backend/
-│   ├── app/
-│   │   ├── api/           # REST API endpoints
-│   │   │   ├── auth.py    # Authentication routes
-│   │   │   ├── sessions.py # Session management
-│   │   │   ├── questions.py # Question CRUD
-│   │   │   ├── export.py  # Export & scoring endpoints
-│   │   │   └── deps.py    # Dependencies (auth guards)
-│   │   ├── core/          # Configuration & security
-│   │   │   ├── config.py  # Settings from env vars
-│   │   │   ├── database.py # DB connection
-│   │   │   └── security.py # JWT & password hashing
-│   │   ├── models/        # SQLAlchemy ORM models
-│   │   ├── schemas/       # Pydantic request/response schemas
-│   │   ├── services/      # Business logic
-│   │   │   ├── scoring.py # Speed-based scoring engine
-│   │   │   └── export.py  # CSV/Excel export
-│   │   ├── websocket/     # Real-time communication
-│   │   │   ├── manager.py # Connection manager
-│   │   │   └── handlers.py # WebSocket event handlers
-│   │   └── main.py        # FastAPI app entry point
-│   ├── seed_data.py       # Database seeder
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── admin/     # Admin dashboard, session manager, question editor, live control
-│   │   │   ├── participant/ # Lobby and quiz interface
-│   │   │   └── display/   # Public projector screen
-│   │   ├── contexts/      # React contexts (auth, theme)
-│   │   ├── services/      # API client & WebSocket service
-│   │   └── App.tsx        # Router configuration
-│   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
-├── sample_questions.csv    # Sample import file
-└── README.md
+# Services:
+# Frontend:  http://localhost:3000
+# Backend:   http://localhost:8000
+# PostgreSQL: localhost:5432
 ```
 
-## API Endpoints
+To stop:
+```bash
+docker-compose down
+```
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register admin account |
-| POST | `/api/auth/login` | Login |
-| GET | `/api/auth/me` | Get current user |
-
-### Sessions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/sessions/` | List all sessions |
-| POST | `/api/sessions/` | Create session |
-| GET | `/api/sessions/{id}` | Get session details |
-| PUT | `/api/sessions/{id}` | Update session |
-| DELETE | `/api/sessions/{id}` | Delete session |
-| POST | `/api/sessions/{id}/duplicate` | Duplicate session |
-| POST | `/api/sessions/{id}/open-lobby` | Open lobby |
-| POST | `/api/sessions/{id}/start` | Start quiz |
-| POST | `/api/sessions/{id}/pause` | Pause quiz |
-| POST | `/api/sessions/{id}/resume` | Resume quiz |
-| POST | `/api/sessions/{id}/end` | End quiz |
-| POST | `/api/sessions/join` | Join as participant |
-
-### Questions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/sessions/{id}/questions/` | List questions |
-| POST | `/api/sessions/{id}/questions/` | Create question |
-| PUT | `/api/sessions/{id}/questions/{qid}` | Update question |
-| DELETE | `/api/sessions/{id}/questions/{qid}` | Delete question |
-| POST | `/api/sessions/{id}/questions/{qid}/duplicate` | Duplicate question |
-| POST | `/api/sessions/{id}/questions/import` | Import from file |
-
-### Export & Scoring
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/sessions/{id}/leaderboard` | Get leaderboard |
-| GET | `/api/sessions/{id}/export/csv` | Export CSV |
-| GET | `/api/sessions/{id}/export/excel` | Export Excel |
-| POST | `/api/sessions/{id}/adjust-score` | Manual score adjust |
-| GET | `/api/sessions/{id}/participants` | List participants |
-
-### WebSocket Endpoints
-| Endpoint | Description |
-|----------|-------------|
-| `ws://host/ws/admin/{sessionId}?token=JWT` | Admin control channel |
-| `ws://host/ws/participant/{sessionId}?participant_id=ID` | Participant channel |
-| `ws://host/ws/display/{sessionId}` | Public display channel |
-
-## Importing Questions
-
-Questions can be imported from CSV or Excel files with these columns:
-
-| Column | Required | Description |
-|--------|----------|-------------|
-| question_text | Yes | The question |
-| option_a | Yes | Option A text |
-| option_b | Yes | Option B text |
-| option_c | Yes | Option C text |
-| option_d | Yes | Option D text |
-| correct_answer | Yes | A, B, C, or D |
-| difficulty | No | easy, medium, hard |
-| category | No | Category name |
-| explanation | No | Answer explanation |
-| timer_seconds | No | Timer (default: 20) |
-
-A sample file is included at `sample_questions.csv`.
+---
 
 ## Environment Variables
 
+Create a `.env` file in `backend/` (see `.env.example` at project root):
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| DATABASE_URL | sqlite:///./quiz.db | Database connection string |
-| SECRET_KEY | (change this) | JWT signing secret |
-| ALGORITHM | HS256 | JWT algorithm |
-| ACCESS_TOKEN_EXPIRE_MINUTES | 480 | Token expiration |
-| CORS_ORIGINS | localhost:3000,5173 | Allowed CORS origins |
-| VITE_API_URL | http://localhost:8000 | Backend API URL |
-| VITE_WS_URL | ws://localhost:8000 | WebSocket URL |
+| `DATABASE_URL` | `sqlite:///./quiz.db` | DB connection string |
+| `SECRET_KEY` | (change in prod) | JWT signing secret |
+| `ALGORITHM` | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `480` | Token lifetime |
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Allowed frontend origins |
+
+Frontend env vars (set in shell or `.env` in `frontend/`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:8000` | Backend API URL |
+| `VITE_WS_URL` | `ws://localhost:8000` | WebSocket URL |
+
+---
+
+## How to Use
+
+### 1. Register & Login
+
+- Open http://localhost:5173/register to create an admin account
+- Login at http://localhost:5173/login
+
+### 2. Create a Quiz
+
+- Click "New Session" on the dashboard
+- Go to Question Editor and add questions:
+  - **Multiple Choice**: 4 options (A/B/C/D), select the correct one
+  - **Type the Answer**: enter the correct text (participants type their answer, matched case-insensitively)
+- Optionally upload images for questions
+- Import questions from CSV/Excel
+
+### 3. Run the Quiz
+
+- Open the lobby (participants can now join with the session code)
+- Open the **Display Screen** on a projector: `/display/{sessionId}`
+- Go to **Live Control** to run the quiz
+- Start each question, watch submissions come in, timer auto-ends or end manually
+- Leaderboard updates automatically after each question
+
+### 4. Participants Join
+
+- Go to http://localhost:5173/join
+- Enter the 6-character session code and a team name
+- Answer questions on their phone/laptop in real-time
+
+### 5. Export Results
+
+- After the quiz, export leaderboard and responses as CSV or Excel from the session page
+
+---
+
+## Scoring System
+
+| Rank (by speed) | Points |
+|---|---|
+| 1st correct | 10 |
+| 2nd correct | 9 |
+| 3rd correct | 8 |
+| 4th correct | 7 |
+| 5th correct | 6 |
+| 6th+ correct | 5 |
+| Wrong / No answer | 0 |
+
+Ties (same response time) get the same rank and points.
+
+**Leaderboard ranking priority**: Total Score > Correct Answers > Average Response Time (fastest wins)
+
+---
+
+## Importing Questions (CSV/Excel)
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `question_text` | Yes | The question |
+| `question_type` | No | `mcq` (default) or `text` |
+| `option_a` | MCQ only | Option A text |
+| `option_b` | MCQ only | Option B text |
+| `option_c` | MCQ only | Option C text |
+| `option_d` | MCQ only | Option D text |
+| `correct_answer` | Yes | A/B/C/D for MCQ, or the text answer |
+| `difficulty` | No | easy, medium, hard |
+| `category` | No | Category name |
+| `explanation` | No | Shown after answer reveal |
+| `timer_seconds` | No | Default: 20 |
+
+---
+
+## WebSocket Architecture
+
+All real-time communication flows through three WebSocket channels:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/ws/admin/{sessionId}?token=JWT` | Admin sends commands (start question, end timer, show leaderboard) |
+| `/ws/participant/{sessionId}?participant_id=ID` | Participants receive questions and submit answers |
+| `/ws/display/{sessionId}` | Display screen receives all events for projection |
+
+The server broadcasts a `server_time` timestamp with each question start so all clients sync their countdown timers regardless of network latency.
+
+---
+
+## API Documentation
+
+Once the backend is running, visit:
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+---
 
 ## Production Deployment
 
-1. Update `SECRET_KEY` to a strong random value
-2. Set `DATABASE_URL` to your PostgreSQL instance
-3. Update `CORS_ORIGINS` with your frontend domain
-4. Build the frontend: `cd frontend && npm run build`
-5. Serve the built frontend with nginx or similar
-6. Run the backend with a production server: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4`
+1. Set a strong random `SECRET_KEY`
+2. Use PostgreSQL: set `DATABASE_URL=postgresql://user:pass@host:5432/dbname`
+3. Update `CORS_ORIGINS` with your production frontend domain
+4. Build frontend: `cd frontend && npm run build`
+5. Serve built files with nginx
+6. Run backend: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4`
 
-Or use Docker Compose:
+Or use Docker Compose with production env vars.
 
-```bash
-# Set production environment variables
-export SECRET_KEY=$(openssl rand -hex 32)
-
-# Build and run
-docker-compose up --build -d
-```
+---
 
 ## License
 

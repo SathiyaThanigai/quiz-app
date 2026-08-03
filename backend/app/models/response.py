@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Float, Boolean
+from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Float, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -11,6 +11,9 @@ class Response(Base):
     """Response model - participant answers to questions."""
 
     __tablename__ = "responses"
+    __table_args__ = (
+        UniqueConstraint("participant_id", "question_id", name="uq_participant_question"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     participant_id = Column(String, ForeignKey("participants.id"), nullable=False)

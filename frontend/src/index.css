@@ -3,33 +3,121 @@
 @tailwind utilities;
 
 @layer base {
+  /* Prevent iOS zoom on input focus (requires 16px minimum) */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    /* Prevent overscroll bounce on mobile */
+    overscroll-behavior: none;
+  }
+
   body {
     @apply antialiased text-gray-900 dark:text-gray-100;
+    /* Safe area padding for notched devices */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    /* Prevent pull-to-refresh */
+    overscroll-behavior-y: contain;
+    /* Prevent text selection on long press (for quiz buttons) */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* Smooth touch scrolling */
+  * {
+    -webkit-overflow-scrolling: touch;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-4 py-3 bg-primary-600 text-white rounded-lg font-medium 
+           hover:bg-primary-700 active:bg-primary-800 
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           min-h-[44px] select-none;
   }
 
   .btn-secondary {
-    @apply px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
+           rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 
+           active:bg-gray-400 dark:active:bg-gray-500
+           focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           min-h-[44px] select-none;
   }
 
   .btn-danger {
-    @apply px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-4 py-3 bg-red-600 text-white rounded-lg font-medium 
+           hover:bg-red-700 active:bg-red-800
+           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           min-h-[44px] select-none;
   }
 
   .btn-success {
-    @apply px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-4 py-3 bg-green-600 text-white rounded-lg font-medium 
+           hover:bg-green-700 active:bg-green-800
+           focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           min-h-[44px] select-none;
   }
 
   .input-field {
-    @apply w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder-gray-400 dark:placeholder-gray-500 transition-colors;
+    @apply w-full px-4 py-3 border border-gray-300 dark:border-gray-600 
+           rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent 
+           placeholder-gray-400 dark:placeholder-gray-500 transition-colors
+           min-h-[44px];
   }
 
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6;
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6;
+  }
+
+  /* Mobile-optimized option buttons for quiz */
+  .quiz-option {
+    @apply p-4 rounded-xl text-white font-medium text-left 
+           transition-all select-none min-h-[56px]
+           flex items-center gap-3;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Full-height mobile screen (accounts for address bar) */
+  .mobile-full-height {
+    min-height: 100dvh;
+  }
+
+  /* Animate pulse for timer urgency */
+  @keyframes pulse-fast {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  .animate-pulse-fast {
+    animation: pulse-fast 0.5s ease-in-out infinite;
+  }
+}
+
+/* Mobile landscape adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+  .card {
+    padding: 0.75rem;
+  }
+}
+
+/* Touch device specific: larger tap areas */
+@media (hover: none) and (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

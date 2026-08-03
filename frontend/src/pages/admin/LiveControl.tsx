@@ -11,7 +11,7 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 interface Question {
   id: string
@@ -46,7 +46,6 @@ export default function LiveControl() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [correctCount, setCorrectCount] = useState(0)
   const [timer, setTimer] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Phase: idle → active → revealed → (next or complete)
   const [phase, setPhase] = useState<'idle' | 'active' | 'revealed' | 'complete'>('idle')
@@ -61,7 +60,6 @@ export default function LiveControl() {
     connectWebSocket()
     return () => {
       wsRef.current?.disconnect()
-      if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [])
 
@@ -130,29 +128,18 @@ export default function LiveControl() {
         setSubmissions(message.data?.submissions || 0)
         setTotalParticipants(message.data?.total_participants || 0)
         break
-      case 'question_started': {
-        // Timer sync: start timer from server echo so all screens are in sync
-        const timerSec = message.data?.timer_seconds || 0
-        let adjusted = timerSec
-        if (message.data?.server_time) {
-          const serverMs = new Date(message.data.server_time + 'Z').getTime()
-          const elapsedSec = (Date.now() - serverMs) / 1000
-          adjusted = Math.max(0, Math.round(timerSec - elapsedSec))
-        }
-        setTimer(adjusted)
-        if (timerRef.current) clearInterval(timerRef.current)
-        timerRef.current = setInterval(() => {
-          setTimer((prev) => {
-            if (prev <= 1) {
-              if (timerRef.current) clearInterval(timerRef.current)
-              wsRef.current?.send({ type: 'end_question' })
-              return 0
-            }
-            return prev - 1
-          })
-        }, 1000)
+      case 'question_started':
+        // Server will broadcast timer_tick messages, just set initial value
+        setTimer(message.data?.timer_seconds || 0)
         break
-      }
+      case 'timer_tick':
+        // Server-authoritative timer tick
+        setTimer(message.data?.remaining || 0)
+        break
+      case 'timer_expired':
+        // Server auto-ends the question — just update local timer display
+        setTimer(0)
+        break
       case 'question_ended':
         break
       case 'answer_revealed':
@@ -182,13 +169,16 @@ export default function LiveControl() {
   }
 
   const endQuestion = () => {
-    if (timerRef.current) clearInterval(timerRef.current)
     setTimer(0)
     wsRef.current?.send({ type: 'end_question' })
   }
 
   const showLeaderboardAction = () => {
     wsRef.current?.send({ type: 'show_leaderboard' })
+  }
+
+  const finishQuiz = () => {
+    wsRef.current?.send({ type: 'finish_quiz' })
   }
 
   // Navigate to previous question
@@ -414,9 +404,22 @@ export default function LiveControl() {
               )}
 
               {phase === 'revealed' && (
-                <button onClick={showLeaderboardAction} className="btn-primary flex items-center gap-2">
-                  <Trophy size={18} /> Show Leaderboard
-                </button>
+                <>
+                  {/* Show "Next Question" for all questions except the last */}
+                  {currentIndex < questions.length - 1 ? (
+                    <button onClick={goToNext} className="btn-primary flex items-center gap-2">
+                      <SkipForward size={18} /> Next Question
+                    </button>
+                  ) : (
+                    /* Show "Finish Quiz" only on the last question */
+                    <button onClick={finishQuiz} className="btn-danger flex items-center gap-2 text-base py-2.5 px-5">
+                      <Trophy size={18} /> Finish Quiz
+                    </button>
+                  )}
+                  <button onClick={showLeaderboardAction} className="btn-secondary flex items-center gap-2">
+                    <Trophy size={18} /> Leaderboard
+                  </button>
+                </>
               )}
 
               {phase === 'complete' && (

@@ -30,7 +30,12 @@ def get_db_session():
 
 @router.websocket("/ws/admin/{session_id}")
 async def admin_websocket(websocket: WebSocket, session_id: str, token: str = Query(...)):
-    """WebSocket endpoint for admin controlling a quiz session."""
+    """WebSocket endpoint for admin controlling a quiz session.
+
+    Supports multiple simultaneous admin connections (e.g., Control Device + Display Device).
+    All admin devices receive the same state broadcasts. Commands from any admin device
+    are processed and the result is broadcast to all admin connections.
+    """
     # Verify token
     payload = decode_access_token(token)
     if not payload:
@@ -54,20 +59,36 @@ async def admin_websocket(websocket: WebSocket, session_id: str, token: str = Qu
 
         await manager.connect(websocket, session_id, "admin", user_id)
 
-        # Send initial state
+        # Build full current state for this admin device (state restoration on connect/reconnect)
+        current_state = {
+            "session_id": session_id,
+            "status": session.status,
+            "connected_participants": manager.get_participant_count(session_id),
+            "current_question_index": session.current_question_index,
+            "total_questions": len(session.questions),
+        }
+
+        # If a timer is active, include its state
+        timer = manager.get_timer(session_id)
+        if timer and not timer.is_expired and not timer._stopped:
+            current_state["timer_active"] = True
+            current_state["timer_remaining"] = timer.remaining
+            current_state["timer_question_id"] = timer.question_id
+        else:
+            current_state["timer_active"] = False
+
         await websocket.send_json({
             "type": "connection_established",
-            "data": {
-                "session_id": session_id,
-                "status": session.status,
-                "connected_participants": manager.get_participant_count(session_id),
-            }
+            "data": current_state,
         })
 
         # Listen for admin commands
         while True:
             data = await websocket.receive_json()
-            await handle_admin_message(data, session_id, db)
+            if data.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+            else:
+                await handle_admin_message(data, session_id, db)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, session_id, "admin", user_id)
@@ -229,17 +250,28 @@ async def display_websocket(websocket: WebSocket, session_id: str):
         display_id = f"display_{id(websocket)}"
         await manager.connect(websocket, actual_session_id, "display", display_id)
 
-        # Send initial state
+        # Build full current state for reconnection
+        display_state = {
+            "session_id": actual_session_id,
+            "session_title": session.title,
+            "status": session.status,
+            "participant_count": manager.get_participant_count(actual_session_id),
+            "total_questions": len(session.questions),
+            "current_question_index": session.current_question_index,
+        }
+
+        # Include active timer state so display can immediately show the countdown
+        timer = manager.get_timer(actual_session_id)
+        if timer and not timer.is_expired and not timer._stopped:
+            display_state["timer_active"] = True
+            display_state["timer_remaining"] = timer.remaining
+            display_state["timer_question_id"] = timer.question_id
+        else:
+            display_state["timer_active"] = False
+
         await websocket.send_json({
             "type": "connection_established",
-            "data": {
-                "session_id": actual_session_id,
-                "session_title": session.title,
-                "status": session.status,
-                "participant_count": manager.get_participant_count(actual_session_id),
-                "total_questions": len(session.questions),
-                "current_question_index": session.current_question_index,
-            }
+            "data": display_state,
         })
 
         # Keep connection alive
@@ -284,15 +316,19 @@ async def handle_admin_message(data: dict, session_id: str, db: Session):
         index = data.get("data", {}).get("index", 0)
         await go_to_question(session_id, index, db)
 
-    elif msg_type == "ping":
-        await manager.send_to_admin(session_id, {"type": "pong"})
+    elif msg_type == "finish_quiz":
+        await finish_quiz(session_id, db)
 
 
 async def start_question(session_id: str, db: Session, index=None):
     """Start the current question - send it to all participants.
     Clears any previous responses for this question so participants can re-answer.
+    Starts server-authoritative timer that broadcasts ticks to all clients.
     """
     import json as _json
+
+    # Refresh DB state to avoid stale cached data in long-lived WebSocket sessions
+    db.expire_all()
 
     session = db.query(QuizSession).filter(QuizSession.id == session_id).first()
     if not session or session.status != SessionStatus.ACTIVE.value:
@@ -322,6 +358,21 @@ async def start_question(session_id: str, db: Session, index=None):
         except:
             image_urls = []
 
+    # Start server-authoritative timer with auto-end callback
+    async def _on_timer_expire():
+        """Called by the server when timer hits 0 — automatically ends the question.
+        Uses a fresh DB session to avoid stale state issues."""
+        from app.core.database import SessionLocal
+        expire_db = SessionLocal()
+        try:
+            await end_question(session_id, expire_db)
+        except Exception as e:
+            print(f"Auto end_question error for session {session_id}: {e}")
+        finally:
+            expire_db.close()
+
+    timer = manager.start_timer(session_id, question.id, question.timer_seconds, on_expire=_on_timer_expire)
+
     message = {
         "type": "question_started",
         "data": {
@@ -345,7 +396,18 @@ async def start_question(session_id: str, db: Session, index=None):
 
 
 async def end_question(session_id: str, db: Session):
-    """End the current question - stop accepting answers, auto-reveal answer."""
+    """End the current question - stop accepting answers, auto-reveal answer.
+    Can be called manually by admin (end_question message) or automatically by timer expiry.
+    """
+    # Stop the server-authoritative timer (safe to call even if already expired/stopped)
+    timer = manager.get_timer(session_id)
+    if timer and not timer._stopped:
+        timer._stopped = True  # Mark as stopped to prevent re-entry
+    manager._active_timers.pop(session_id, None)  # Remove from active timers
+
+    # Refresh DB state
+    db.expire_all()
+
     session = db.query(QuizSession).filter(QuizSession.id == session_id).first()
     if not session:
         return
@@ -545,6 +607,53 @@ async def go_to_question(session_id: str, index: int, db: Session):
     })
 
 
+async def finish_quiz(session_id: str, db: Session):
+    """Finish the quiz: stop all timers, lock submissions, calculate final scores, broadcast results."""
+    # Stop any active timer
+    manager.stop_timer(session_id)
+
+    db.expire_all()
+
+    session = db.query(QuizSession).filter(QuizSession.id == session_id).first()
+    if not session:
+        return
+
+    # If there's an active question that hasn't been ended, end it now
+    question = db.query(Question).filter(
+        Question.session_id == session_id,
+        Question.order_index == session.current_question_index,
+    ).first()
+
+    if question:
+        # Calculate scores for the current question if not already done
+        from app.models.response import Response as ResponseModel
+        has_unscored = db.query(ResponseModel).filter(
+            ResponseModel.question_id == question.id,
+            ResponseModel.points_awarded == 0,
+            ResponseModel.is_correct == True,
+        ).first()
+        if has_unscored:
+            calculate_scores(db, question.id, session_id)
+
+    # Mark session as completed
+    session.status = SessionStatus.COMPLETED.value
+    session.ended_at = datetime.utcnow()
+    db.commit()
+
+    # Get final leaderboard
+    total_questions = len(session.questions)
+    leaderboard = get_leaderboard_data(db, session_id)
+
+    # Broadcast quiz_completed to all connected clients
+    await manager.send_to_session(session_id, {
+        "type": "quiz_completed",
+        "data": {
+            "total_questions": total_questions,
+            "leaderboard": leaderboard,
+        }
+    })
+
+
 async def handle_participant_message(
     data: dict, session_id: str, participant_id: str, db: Session
 ):
@@ -561,6 +670,9 @@ async def handle_answer_submission(
     data: dict, session_id: str, participant_id: str, db: Session
 ):
     """Process a participant's answer submission."""
+    # Refresh DB to avoid stale reads in long-lived WebSocket connections
+    db.expire_all()
+
     answer_data = data.get("data", {})
     question_id = answer_data.get("question_id")
     selected_answer = answer_data.get("selected_answer", "")
@@ -604,6 +716,29 @@ async def handle_answer_submission(
         })
         return
 
+    # Enforce server-side deadline: reject submissions after timer expired
+    timer = manager.get_timer(session_id)
+    if timer and timer.is_expired:
+        await manager.send_to_participant(participant_id, {
+            "type": "error",
+            "data": {"message": "Time is up. Answer not accepted."}
+        })
+        return
+
+    # If no active timer (question already ended), reject
+    if not manager.is_question_active(session_id):
+        await manager.send_to_participant(participant_id, {
+            "type": "error",
+            "data": {"message": "Question has ended. Answer not accepted."}
+        })
+        return
+
+    # Use server-measured response time (time since question started)
+    if timer:
+        response_time = timer.elapsed
+    else:
+        response_time = response_time  # fallback to client-reported
+
     # Determine correctness based on question type
     question_type = question.question_type or "mcq"
     if question_type == "mcq":
@@ -624,7 +759,16 @@ async def handle_answer_submission(
         submitted_at=datetime.utcnow(),
     )
     db.add(response)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # Unique constraint violation — duplicate submission race condition
+        db.rollback()
+        await manager.send_to_participant(participant_id, {
+            "type": "error",
+            "data": {"message": "Already submitted an answer for this question"}
+        })
+        return
 
     # Confirm to participant
     await manager.send_to_participant(participant_id, {

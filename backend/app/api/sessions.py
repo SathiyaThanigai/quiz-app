@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -19,6 +19,12 @@ from app.schemas.participant import ParticipantResponse
 from app.api.deps import get_current_admin
 
 router = APIRouter(prefix="/sessions", tags=["Quiz Sessions"])
+
+# Simple in-memory rate limiter for join endpoint
+import time
+_join_attempts: dict = {}  # ip -> list of timestamps
+JOIN_RATE_LIMIT = 10  # max attempts per window
+JOIN_RATE_WINDOW = 60  # seconds
 
 
 def session_to_response(session: QuizSession) -> QuizSessionResponse:
@@ -193,7 +199,8 @@ async def duplicate_session(
         new_question = Question(
             session_id=new_session.id,
             question_text=question.question_text,
-            image_url=question.image_url,
+            question_type=question.question_type or "mcq",
+            image_urls=question.image_urls,
             correct_answer=question.correct_answer,
             difficulty=question.difficulty,
             category=question.category,
@@ -399,9 +406,24 @@ async def archive_session(
 @router.post("/join", response_model=ParticipantResponse)
 async def join_session(
     join_data: SessionJoin,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Join a quiz session as a participant."""
+    # Rate limiting: prevent brute-force session code guessing
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    attempts = _join_attempts.get(client_ip, [])
+    # Clean old attempts outside the window
+    attempts = [t for t in attempts if now - t < JOIN_RATE_WINDOW]
+    if len(attempts) >= JOIN_RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many join attempts. Please try again later.",
+        )
+    attempts.append(now)
+    _join_attempts[client_ip] = attempts
+
     session = db.query(QuizSession).filter(
         QuizSession.session_code == join_data.session_code.upper(),
     ).first()

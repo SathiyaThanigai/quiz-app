@@ -1,4 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Determine API URL: use env var if set, otherwise derive from current browser location
+// This ensures that when accessed from another device on the network, API calls go to the correct host
+const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 class ApiService {
   private token: string | null = null
