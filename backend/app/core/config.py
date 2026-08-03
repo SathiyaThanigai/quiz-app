@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     ADMIN_ALLOWED_EMAILS: str = ""
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = (
+    "http://localhost:3000,"
+    "http://localhost:5173,"
+    "https://quiz-app-git-main-sathiya1.vercel.app,"
+    "https://quiz-kkljqe9h4-sathiya1.vercel.app"
+     )
 
     # Environment: "development" or "production"
     ENVIRONMENT: str = "development"
