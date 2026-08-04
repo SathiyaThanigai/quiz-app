@@ -1,9 +1,7 @@
 """FastAPI application entry point."""
 
-import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -43,11 +41,8 @@ app.include_router(export_router, prefix="/api")
 app.include_router(uploads_router, prefix="/api")
 app.include_router(ws_router)
 
-# Mount uploads directory for serving static image files
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads")
-UPLOAD_DIR = os.path.abspath(UPLOAD_DIR)
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# Note: images are now uploaded directly to Cloudinary (see app/api/uploads.py)
+# and served from Cloudinary's CDN, so no local static file mount is needed.
 
 
 @app.get("/")

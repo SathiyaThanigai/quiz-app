@@ -2,10 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QuizWebSocket, WebSocketMessage } from '../../services/websocket'
+import { resolveImageUrl } from '../../services/api'
 import { Clock, Users, Trophy, Maximize, Wifi, WifiOff, CheckCircle, Award } from 'lucide-react'
 import ImageZoom from '../../components/ImageZoom'
 
-const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 interface QuestionData {
   question_id: string
@@ -189,7 +189,7 @@ export default function DisplayScreen() {
                 {question.image_urls && question.image_urls.length > 0 && (
                   <div className="flex justify-center gap-4 mt-4 flex-wrap">
                     {question.image_urls.map((url, i) => (
-                      <ImageZoom key={i} src={`${API_URL}${url}`} alt="" className="rounded-xl max-h-40 sm:max-h-56 object-contain" />
+                      <ImageZoom key={i} src={resolveImageUrl(url)} alt="" className="rounded-xl max-h-40 sm:max-h-56 object-contain" />
                     ))}
                   </div>
                 )}

@@ -204,3 +204,14 @@ class ApiService {
 }
 
 export const api = new ApiService()
+
+/**
+ * Resolve an image URL returned by the backend into a fully-qualified URL.
+ * Images are now uploaded to Cloudinary and stored as full https:// URLs,
+ * so they should be used as-is. Older/local-relative URLs (starting with
+ * "/") are still prefixed with API_URL for backward compatibility.
+ */
+export function resolveImageUrl(url: string): string {
+  if (!url) return url
+  return url.startsWith('http') ? url : `${API_URL}${url}`
+}

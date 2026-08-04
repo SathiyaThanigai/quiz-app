@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { QuizWebSocket, WebSocketMessage } from '../../services/websocket'
+import { resolveImageUrl } from '../../services/api'
 import { Clock, CheckCircle, Wifi, WifiOff, Trophy } from 'lucide-react'
 import ImageZoom from '../../components/ImageZoom'
 
@@ -220,7 +221,7 @@ export default function ParticipantQuiz() {
                     {question.image_urls.map((url, i) => (
                       <ImageZoom
                         key={i}
-                        src={`${import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`}${url}`}
+                        src={resolveImageUrl(url)}
                         alt={`Question image ${i + 1}`}
                         className="rounded-lg max-h-48 object-contain"
                       />

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { api } from '../../services/api'
+import { api, resolveImageUrl } from '../../services/api'
 import {
   ArrowLeft, Plus, Trash2, Copy, Edit, Save, X,
   Upload, Clock, Tag, Image
@@ -306,7 +306,7 @@ export default function QuestionEditor() {
                   {formImages.map((url, i) => (
                     <div key={i} className="relative group">
                       <img
-                        src={`${API_URL}${url}`}
+                        src={resolveImageUrl(url)}
                         alt={`Question image ${i + 1}`}
                         className="w-24 h-24 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
                       />
@@ -484,7 +484,7 @@ export default function QuestionEditor() {
                           {q.image_urls.map((url, i) => (
                             <img
                               key={i}
-                              src={`${API_URL}${url}`}
+                              src={resolveImageUrl(url)}
                               alt={`Q${idx + 1} image ${i + 1}`}
                               className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
                             />

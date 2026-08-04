@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { api } from '../../services/api'
+import { api, resolveImageUrl } from '../../services/api'
 import { QuizWebSocket, WebSocketMessage } from '../../services/websocket'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -11,7 +11,6 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 interface Question {
   id: string
@@ -290,7 +289,7 @@ export default function LiveControl() {
                     {currentQuestion.image_urls.map((url, i) => (
                       <img
                         key={i}
-                        src={`${API_URL}${url}`}
+                        src={resolveImageUrl(url)}
                         alt={`Question image ${i + 1}`}
                         className="max-h-40 rounded-lg object-contain border border-gray-200 dark:border-gray-600"
                       />
