@@ -121,10 +121,16 @@ def update_participant_scores(db: Session, session_id: str):
 def update_participant_ranks(db: Session, session_id: str):
     """
     Update participant ranks using standard competition ranking (1, 2, 2, 4).
-    Based on:
-    1. Total Score (descending)
-    2. Correct Answers (descending)
-    3. Average Response Time (ascending - faster is better)
+
+    Ranking criteria, in order:
+    1. Correct Answers (descending) - the primary criterion. Response time
+       never outweighs this: a participant with more correct answers always
+       outranks one with fewer, regardless of speed.
+    2. Average Response Time across correctly-answered questions, using only
+       server-recorded response_time values (ascending - faster is better).
+       Used only to break ties between participants with an equal number of
+       correct answers.
+    3. If still tied after both criteria, participants share the same rank.
     """
     participants = (
         db.query(Participant)
@@ -132,24 +138,29 @@ def update_participant_ranks(db: Session, session_id: str):
         .all()
     )
 
-    # Sort participants
-    def sort_key(p):
-        avg_time = (
+    def avg_response_time(p) -> float:
+        return (
             p.total_response_time / p.correct_answers
             if p.correct_answers > 0
             else float('inf')
         )
-        return (-p.total_score, -p.correct_answers, avg_time)
+
+    # Sort participants: correct answers desc, then avg response time asc.
+    def sort_key(p):
+        return (-p.correct_answers, avg_response_time(p))
 
     sorted_participants = sorted(participants, key=sort_key)
 
-    # Standard competition ranking: shared ranks for ties
+    # Standard competition ranking: shared ranks for ties.
+    # Round avg response time before comparing so equal displayed times
+    # (e.g. 2.503 vs 2.504) are treated as a genuine tie.
     current_rank = 1
     for i, participant in enumerate(sorted_participants):
         if i > 0:
             prev = sorted_participants[i - 1]
-            # If score differs, rank jumps to position
-            if participant.total_score != prev.total_score:
+            same_correct_answers = participant.correct_answers == prev.correct_answers
+            same_avg_time = round(avg_response_time(participant), 2) == round(avg_response_time(prev), 2)
+            if not (same_correct_answers and same_avg_time):
                 current_rank = i + 1
         participant.rank = current_rank
 
